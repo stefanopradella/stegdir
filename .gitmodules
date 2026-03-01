@@ -1,0 +1,3 @@
+[submodule "matlab-base64"]
+	path = matlab-base64
+	url = https://github.com/stefanopradella/matlab-base64
