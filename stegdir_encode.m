@@ -21,12 +21,10 @@ function stegdir_encode(inputPath, outputPath)
     blkCounter = 0;
     while(1)
         fileData = uint8(fread(fin, blockSize, "uint8"));
-        fprintf("Read %d bytes\n", numel(fileData))
-
         if numel(fileData) == 0
             break
         end
-        mkdir(outputPath+filesep+num2str(blkCounter)+"_"+matlab.net.base64encode(fileData))
+        mkdir(outputPath+filesep+num2str(blkCounter)+"_"+base64Encode(fileData, true))
         blkCounter = blkCounter + 1;
     end
 
