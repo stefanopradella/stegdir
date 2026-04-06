@@ -1,56 +1,88 @@
 classdef FunctionalTests < matlab.unittest.TestCase
 
-    properties
-        nRandomisedTestIterations = 4;
+    properties (Constant)
+        nRandomisedTestIterations = 1024;
         maxBytesRandomisedTest = 1024;
-        inputFileName;
-        outputFileName;
-        encodedFolderName;
     end
     
+    properties
+        testTempDir
+    end
+
+    properties (TestParameter)
+        % Use function handles to bind C wrappers through TestParameters
+        Implementation = struct( ...
+            'matlab', struct('encode', @stegdir_encode,           'decode', @stegdir_decode), ...
+            'c',      struct('encode', @FunctionalTests.cEncode,  'decode', @FunctionalTests.cDecode) ...
+            )
+    end
+
+    %% Test class methods
+
+    methods (TestMethodSetup)
+        function createTempDir(testCase)
+            testCase.testTempDir = tempname();
+            mkdir(testCase.testTempDir);
+        end
+    end
+
+    methods (TestMethodTeardown)
+        function deleteTempDir(testCase)
+            if isfolder(testCase.testTempDir)
+                rmdir(testCase.testTempDir, 's');
+            end
+        end
+    end
+
 
     methods (Test)
 
-        function randomEncodeAndDecode(testCase)
-
-            for iIteration = 1:testCase.nRandomisedTestIterations
-
-                % Generate random bytes and write to file
-                inputData = uint8(randi([0 2^8-1], 1, randi([1 testCase.maxBytesRandomisedTest])))';
-
-                testCase.inputFileName      =   [testCase.inputFileName;        "testFile_"+num2str(iIteration)+"_in.bin"];
-                testCase.outputFileName     =   [testCase.outputFileName;       "testFile_"+num2str(iIteration)+"_out.bin"];
-                testCase.encodedFolderName  =   [testCase.encodedFolderName;    "test_"+num2str(iIteration)];
-
-                fout = fopen(testCase.inputFileName(iIteration), "wb");
-                fwrite(fout, inputData, "uint8");
-                fclose(fout);
-
-                stegdir_encode(testCase.inputFileName(iIteration), testCase.encodedFolderName(iIteration));
-                stegdir_decode(testCase.encodedFolderName(iIteration), testCase.outputFileName(iIteration));
-
-                fin = fopen(testCase.outputFileName(iIteration), "rb");
-                decodedData = uint8(fread(fin, "uint8"));
-                fclose(fin);
-
-                % Validate that the decoded data matches the original input data
-                testCase.verifyEqual(decodedData, inputData);
-
+        function randomEncodeAndDecode(testCase, Implementation)
+            for i = 1:testCase.nRandomisedTestIterations
+                nBytes  = randi([1, testCase.maxBytesRandomisedTest]);
+                payload = uint8(randi([0 255], nBytes, 1));
+                testCase.encodeAndDecode(Implementation, payload, i);
             end
         end
         
     end
     
-    methods (TestMethodTeardown)
-        
-        function cleanTestOutputs(testCase)
-            for iIteration = 1:testCase.nRandomisedTestIterations
-                delete(testCase.inputFileName(iIteration));
-                delete(testCase.outputFileName(iIteration));
-                rmdir(testCase.encodedFolderName(iIteration), 's');
-            end
+    methods (Access = private)
+ 
+        function encodeAndDecode(testCase, impl, inputData, iteration)
+ 
+            inputFile     = fullfile(testCase.testTempDir, "testFile_"   + num2str(iteration) + "_in.bin");
+            outputFile    = fullfile(testCase.testTempDir, "testFile_"   + num2str(iteration) + "_out.bin");
+            encodedFolder = fullfile(testCase.testTempDir, "testDir_"   + num2str(iteration));
+ 
+            fout = fopen(inputFile, "wb");
+            fwrite(fout, inputData, "uint8");
+            fclose(fout);
+ 
+            impl.encode(inputFile, encodedFolder);
+            impl.decode(encodedFolder, outputFile);
+ 
+            fin         = fopen(outputFile, "rb");
+            decodedData = uint8(fread(fin, "uint8"));
+            fclose(fin);
+ 
+            testCase.assertEqual(decodedData, inputData, "Data mismatch");
         end
-        
+    end
+
+    %  Wrapper methods to C binary
+    methods (Static, Access = private)
+
+        function cEncode(inputFile, encodedFolder)
+            returnCode = system("../stegdir encode " + inputFile + " " + encodedFolder);
+            assert(returnCode == 0, "stegdir encode exited with code %d.", returnCode);
+        end
+    
+        function cDecode(encodedFolder, outputFile)
+            returnCode = system("../stegdir decode " + encodedFolder + " " + outputFile);
+            assert(returnCode == 0, "stegdir decode exited with code %d.", returnCode);
+        end
+ 
     end
 
 end
