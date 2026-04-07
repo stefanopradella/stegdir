@@ -24,7 +24,6 @@ helpsearch*/
 # Code generation folders
 slprj/
 sccprj/
-codegen/
 
 # Cache files
 *.slxc
